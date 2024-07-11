@@ -1,27 +1,29 @@
 #include <Arduino.h>
 #include <LiquidCrystal.h>
-#include <Stepper.h>
 #include <Servo.h>
 
-#define SERVO2 11   //pino D1 da shield (PWM)
+//#define SERVO2 11   //pino D1 da shield (PWM)
 #define STEP 12     //pino D2 da shield
 #define DIR 13      //pino D3 da shield
-#define ENABLE 1    //pino D5 da shield
+#define ENABLE 11    //pino D5 da shield
 #define SENSOR 2    //pino D6 da shield
-#define SERVO1 3    //pino D7 da shield (PWM)
-#define PASSOS 200  //passos do motor
+//#define SERVO1 3    //pino D7 da shield (PWM)
 
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-Servo S1;
-Servo S2;
-Stepper motor(PASSOS, STEP, DIR, ENABLE, 0);
+//Servo S1;
+//Servo S2;
 
 int keypad_pin = A0;
 int keypad_value = 0;
 int keypad_value_old = 0;
+int res_count = 1;
 int count = 1;
 int maxCortes = 300;
-int valorDesejado = 0;
+int maxResistor = 50; // Não esquecer de considerar esse valor x10 na função iniciarTarefa()
+int valorCorteDesejado = 0;
+int valorResistorDesejado = 0;
+
+volatile int contador = 0;
  
 unsigned long previousMillis = 0;
 const unsigned long tempoPressionado = 2000;
@@ -30,12 +32,14 @@ const long interval = 500;
 bool displayCount = true;
 bool incrementando = false;
 bool tarefaIniciada = false;
+bool confirmResCount = false;
+bool confirmCutCount = false;
 
 char btn_push;
 
 byte mainMenuPage = 1;
 byte mainMenuPageOld = 1;
-byte mainMenuTotal = 3;
+byte mainMenuTotal = 4;
 
 void MainMenuDisplay(){
     lcd.clear();
@@ -50,6 +54,10 @@ void MainMenuDisplay(){
           break;
         case 3:
           lcd.print("3. Diodo 1N4007");
+          break;
+        case 4:
+          lcd.print("4. Outras Qtdes");
+          break;
     }
 }
 
@@ -79,44 +87,33 @@ char ReadKeypad(){
  
 }
 
-void iniciarTarefa(int menu, int qtde) {
-  int qtdeSensor = 0;
-  int debouncing = 100;
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Iniciando tarefa...");
-  delay(1000);
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.print("Tarefa iniciada!");
+void sensorInterrupt() {
+  contador++; // Incrementa o contador quando ocorre a interrupção do sensor
+}
 
-  while (qtdeSensor < qtde+1) {
-    motor.step(20);
-    delay(5);
-    if (digitalRead(2) == HIGH) {
-      qtdeSensor++;
-      lcd.setCursor(0, 1);
-      lcd.print("Resistor Detectado!");
-      while (digitalRead(2) == HIGH) {
-        delay(debouncing);
-      }
-      for (int i = maxCortes; i >= 0; i--) {
-      lcd.clear();
-      lcd.setCursor(0, 0);
-      lcd.print("Restantes: ");
-      lcd.print(i);
-      }
-      if (qtdeSensor == qtde) {
-        motor.step(0);
-        qtdeSensor = 0;
-      }
-      delay(1000); // Delay para visualização do texto
-      lcd.clear(); // Limpa o display após detecção
-      }
-    }
-  lcd.clear();
-  lcd.setCursor(0, 1);
-  lcd.print("Tarefa concluida!");
+void iniciarTarefa(int menu, int qtde) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Iniciando tarefa...");
+    delay(1000);
+
+    digitalWrite(ENABLE, LOW);
+    digitalWrite(DIR, LOW);
+
+    unsigned long previousMicros = micros();
+
+   
+            while (contador < qtde+2) {
+                digitalWrite(STEP, HIGH);
+                while (micros() - previousMicros < 300) {}
+                digitalWrite(STEP, LOW);
+                while (micros() - previousMicros < 300) {}
+                previousMicros += 300;
+            }
+            digitalWrite(ENABLE, HIGH);
+    lcd.clear();
+    lcd.setCursor(0, 1);
+    lcd.print("Tarefa concluida!");
 }
 
 bool tarefaCompletada() {
@@ -127,21 +124,21 @@ bool tarefaCompletada() {
     return true; // Retorna verdadeiro para indicar que a tarefa foi completada
 }
 
-void Menu1() {
-  int menuID = 1;  
+void Menu1() {t
+    const int menuID = 1;  
     while (true) {
         lcd.setCursor(0, 1);
         lcd.print("Qtde Cortes:");
         lcd.setCursor(13, 1);
         lcd.print(count);
 
-        bool botaoConfirmarPressionado = false; // Flag para verificar se o botão de confirmar foi pressionado
+        bool botaoConfirmarPressionado = false;
 
         while (ReadKeypad() != 'L') {
             unsigned long currentMillis = millis();
             
             // Verifica se alcançou o valor desejado e para de piscar
-            if (count == valorDesejado && !tarefaIniciada && incrementando) {
+            if (count == valorCorteDesejado && !tarefaIniciada && incrementando) {
                 displayCount = true; // Garante que o count seja exibido
                 previousMillis = currentMillis; // Reinicia o timer de piscar
             }
@@ -188,7 +185,7 @@ void Menu1() {
                 unsigned long pressStartMillis = millis();
                 while (ReadKeypad() == 'S') {
                     if (millis() - pressStartMillis >= tempoPressionado) {
-                        valorDesejado = count; // Define o valor desejado como o valor atual de count
+                        valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
                         iniciarTarefa(menuID, 15); // Passa o menuID para iniciarTarefa
                         tarefaIniciada = true;
                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
@@ -201,7 +198,7 @@ void Menu1() {
             if (botaoConfirmarPressionado && tarefaCompletada()) {
                 tarefaIniciada = false; // Reinicia o loop do Menu1
                 count = 1; // Reseta count para começar de novo
-                valorDesejado = 0; // Reseta o valor desejado
+                valorCorteDesejado = 0; // Reseta o valor desejado
                 MainMenuDisplay(); // Retorna ao menu principal
                 return; // Sai do loop interno para retornar ao MainMenuDisplay()
             }
@@ -210,7 +207,7 @@ void Menu1() {
 }
 
 void Menu2() {
-  int menuID = 2;  
+    const int menuID = 2;  
     while (true) {
         lcd.setCursor(0, 1);
         lcd.print("Qtde Cortes:");
@@ -223,7 +220,7 @@ void Menu2() {
             unsigned long currentMillis = millis();
             
             // Verifica se alcançou o valor desejado e para de piscar
-            if (count == valorDesejado && !tarefaIniciada && incrementando) {
+            if (count == valorCorteDesejado && !tarefaIniciada && incrementando) {
                 displayCount = true; // Garante que o count seja exibido
                 previousMillis = currentMillis; // Reinicia o timer de piscar
             }
@@ -270,7 +267,7 @@ void Menu2() {
                 unsigned long pressStartMillis = millis();
                 while (ReadKeypad() == 'S') {
                     if (millis() - pressStartMillis >= tempoPressionado) {
-                        valorDesejado = count; // Define o valor desejado como o valor atual de count
+                        valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
                         iniciarTarefa(menuID, 5);
                         tarefaIniciada = true;
                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
@@ -283,7 +280,7 @@ void Menu2() {
             if (botaoConfirmarPressionado && tarefaCompletada()) {
                 tarefaIniciada = false; // Reinicia o loop do Menu1
                 count = 1; // Reseta count para começar de novo
-                valorDesejado = 0; // Reseta o valor desejado
+                valorCorteDesejado = 0; // Reseta o valor desejado
                 MainMenuDisplay(); // Retorna ao menu principal
                 return; // Sai do loop interno para retornar ao MainMenuDisplay()
             }
@@ -291,21 +288,21 @@ void Menu2() {
     }
 }
 
-void Menu3() {  
-  int menuID = 3;
+void Menu3() {
+    const int menuID = 3;
+    bool botaoConfirmarPressionado = false; // Flag para verificar se o botão de confirmar foi pressionado
+
     while (true) {
         lcd.setCursor(0, 1);
         lcd.print("Qtde Cortes:");
         lcd.setCursor(13, 1);
         lcd.print(count);
 
-        bool botaoConfirmarPressionado = false; // Flag para verificar se o botão de confirmar foi pressionado
-
         while (ReadKeypad() != 'L') {
             unsigned long currentMillis = millis();
             
             // Verifica se alcançou o valor desejado e para de piscar
-            if (count == valorDesejado && !tarefaIniciada && incrementando) {
+            if (count == valorCorteDesejado && !tarefaIniciada && incrementando) {
                 displayCount = true; // Garante que o count seja exibido
                 previousMillis = currentMillis; // Reinicia o timer de piscar
             }
@@ -352,7 +349,7 @@ void Menu3() {
                 unsigned long pressStartMillis = millis();
                 while (ReadKeypad() == 'S') {
                     if (millis() - pressStartMillis >= tempoPressionado) {
-                        valorDesejado = count; // Define o valor desejado como o valor atual de count
+                        valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
                         iniciarTarefa(menuID, 4);
                         tarefaIniciada = true;
                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
@@ -365,9 +362,152 @@ void Menu3() {
             if (botaoConfirmarPressionado && tarefaCompletada()) {
                 tarefaIniciada = false; // Reinicia o loop do Menu1
                 count = 1; // Reseta count para começar de novo
-                valorDesejado = 0; // Reseta o valor desejado
+                valorCorteDesejado = 0; // Reseta o valor desejado
                 MainMenuDisplay(); // Retorna ao menu principal
                 return; // Sai do loop interno para retornar ao MainMenuDisplay()
+            }
+        }
+    }
+}
+
+void Menu4(){
+    const int menuID = 4;
+    if(confirmResCount == false){
+        while (true) {
+            lcd.clear();
+            lcd.setCursor(1, 0);
+            lcd.print("Qtde (x10):");
+            lcd.setCursor(12, 0);
+            lcd.print(res_count);
+
+            while (ReadKeypad() != 'L') {
+                unsigned long currentMillis = millis();
+                
+                // Verifica se alcançou o valor desejado e para de piscar
+                if (count == valorCorteDesejado && !tarefaIniciada && incrementando) {
+                    displayCount = true; // Garante que o count seja exibido
+                    previousMillis = currentMillis; // Reinicia o timer de piscar
+                }
+                
+                // Piscar somente se não estiver incrementando, e se não tiver alcançado o valor desejado
+                if (!incrementando && !tarefaIniciada && currentMillis - previousMillis >= interval) {
+                    previousMillis = currentMillis;
+                    displayCount = !displayCount;
+                    lcd.setCursor(12, 0);
+                    if (displayCount) {
+                        lcd.print(res_count);
+                    } else {
+                        lcd.print("    "); // Apaga o valor
+                    }
+                }
+
+                char key = ReadKeypad();
+                if (key == 'U' && !tarefaIniciada) {
+                    incrementando = true;
+                    res_count++;
+                    if (res_count > maxResistor){
+                        res_count = 1; // Retorna a 1 se ultrapassar o máximo
+                    }
+                    lcd.setCursor(12, 0);
+                    lcd.print(res_count);
+                    delay(150); // Debounce
+                    displayCount = true; // Garante que o count seja exibido imediatamente após incremento
+                } else if (key == 'D' && !tarefaIniciada) {
+                    incrementando = true;
+                    res_count--;
+                    if (res_count < 1){
+                        res_count = maxResistor; // Retorna a maxCortes se for menor que 1
+                    }
+                    lcd.setCursor(12, 0);
+                    lcd.print(res_count);
+                    delay(150); // Debounce
+                    displayCount = true; // Garante que o count seja exibido imediatamente após decremento
+                } else {
+                    incrementando = false;
+                }
+                
+                if (key == 'S') {
+                    valorResistorDesejado = res_count; // Define o valor desejado como o valor atual de count
+                    while (true) {
+                        lcd.setCursor(1, 1);
+                        lcd.print("Qtde Cortes:");
+                        lcd.setCursor(13, 1);
+                        lcd.print(count);
+
+                        bool botaoConfirmarPressionado = false; // Flag para verificar se o botão de confirmar foi pressionado
+
+                        while (ReadKeypad() != 'L') {
+                            unsigned long currentMillis = millis();
+                            
+                            // Verifica se alcançou o valor desejado e para de piscar
+                            if (count == valorCorteDesejado && !tarefaIniciada && incrementando) {
+                                displayCount = true; // Garante que o count seja exibido
+                                previousMillis = currentMillis; // Reinicia o timer de piscar
+                            }
+                            
+                            // Piscar somente se não estiver incrementando, e se não tiver alcançado o valor desejado
+                            if (!incrementando && !tarefaIniciada && currentMillis - previousMillis >= interval) {
+                                previousMillis = currentMillis;
+                                displayCount = !displayCount;
+                                lcd.setCursor(13, 1);
+                                if (displayCount) {
+                                    lcd.print(count);
+                                } else {
+                                    lcd.print("    "); // Apaga o valor
+                                }
+                            }
+
+                            char key = ReadKeypad();
+                            if (key == 'U' && !tarefaIniciada) {
+                                incrementando = true;
+                                count++;
+                                if (count > maxCortes){
+                                    count = 1; // Retorna a 1 se ultrapassar o máximo
+                                }
+                                lcd.setCursor(13, 1);
+                                lcd.print(count);
+                                delay(150); // Debounce
+                                displayCount = true; // Garante que o count seja exibido imediatamente após incremento
+                            } else if (key == 'D' && !tarefaIniciada) {
+                                incrementando = true;
+                                count--;
+                                if (count < 1){
+                                    count = maxCortes; // Retorna a maxCortes se for menor que 1
+                                }
+                                lcd.setCursor(13, 1);
+                                lcd.print(count);
+                                delay(150); // Debounce
+                                displayCount = true; // Garante que o count seja exibido imediatamente após decremento
+                            } else {
+                                incrementando = false;
+                            }
+                            
+                            // Verifica se o botão 'S' foi pressionado por tempoPressionado para iniciar a tarefa
+                            if (key == 'S' && !tarefaIniciada) {
+                                unsigned long pressStartMillis = millis();
+                                while (ReadKeypad() == 'S') {
+                                    if (millis() - pressStartMillis >= tempoPressionado) {
+                                        valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
+                                        iniciarTarefa(menuID, 4);
+                                        tarefaIniciada = true;
+                                        botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
+                                        break;
+                                    }
+                                }
+                            }
+                            
+                            // Se o botão de confirmar foi pressionado e a tarefa foi completada, reinicia o menu
+                            if (botaoConfirmarPressionado && tarefaCompletada()) {
+                                tarefaIniciada = false; // Reinicia o loop do Menu1
+                                count = 1; // Reseta count para começar de novo
+                                valorCorteDesejado = 0; // Reseta o valor desejado
+                                valorResistorDesejado = 0;
+                                MainMenuDisplay(); // Retorna ao menu principal
+                                return; // Sai do loop interno para retornar ao MainMenuDisplay()
+                            }
+                        }  
+                    }
+                }
             }
         }
     }
@@ -404,11 +544,12 @@ void setup(){
     MainMenuDisplay();
     delay(1000);
 
-    motor.setSpeed(30);
-    S1.attach(SERVO1);
-    S2.attach(SERVO2);
-
+    pinMode(STEP, OUTPUT);
+    pinMode(DIR, OUTPUT);
+    pinMode(ENABLE, OUTPUT);
     pinMode(SENSOR, INPUT);
+
+    attachInterrupt(digitalPinToInterrupt(SENSOR), sensorInterrupt, RISING);
 }
 
 void loop(){
@@ -430,14 +571,13 @@ void loop(){
             case 3:
               Menu3();
               break;
+            case 4:
+              Menu4();
+              break;
         }
  
           MainMenuDisplay();
           WaitBtnRelease();
     }
-    
- 
- 
     delay(10);
-  
 }//--------------- End of loop() loop ---------------------
