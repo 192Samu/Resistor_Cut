@@ -2,16 +2,16 @@
 #include <LiquidCrystal.h>
 #include <Servo.h>
 
-//#define SERVO2 11   //pino D1 da shield (PWM)
 #define STEP 12     //pino D2 da shield
 #define DIR 13      //pino D3 da shield
 #define ENABLE 11    //pino D5 da shield
 #define SENSOR 2    //pino D6 da shield
-//#define SERVO1 3    //pino D7 da shield (PWM)
+#define SERVO1 3    //pino D7 da shield (PWM)
+#define SERVO2 2   //pino D1 da shield (PWM)
 
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-//Servo S1;
-//Servo S2;
+Servo S1;
+Servo S2;
 
 int keypad_pin = A0;
 int keypad_value = 0;
@@ -97,20 +97,30 @@ void iniciarTarefa(int menu, int qtde) {
     lcd.print("Iniciando tarefa...");
     delay(1000);
 
+    S1.write(150);
+    S2.write(30);
+    delay(200);
+    S1.write(90);
+    S2.write(130);
+
     digitalWrite(ENABLE, LOW);
     digitalWrite(DIR, LOW);
 
     unsigned long previousMicros = micros();
-
-   
-            while (contador < qtde+2) {
-                digitalWrite(STEP, HIGH);
-                while (micros() - previousMicros < 300) {}
-                digitalWrite(STEP, LOW);
-                while (micros() - previousMicros < 300) {}
+    while (contador < qtde+2) {
+        digitalWrite(STEP, HIGH);
+        while (micros() - previousMicros < 300) {}
+            digitalWrite(STEP, LOW);
+            while (micros() - previousMicros < 300) {}
                 previousMicros += 300;
             }
-            digitalWrite(ENABLE, HIGH);
+    digitalWrite(ENABLE, HIGH);
+    /*S1.write(75);
+    S2.write(115);
+    delay(500);
+    S1.write(90);
+    S2.write(90);*/
+
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("Tarefa concluida!");
@@ -124,7 +134,7 @@ bool tarefaCompletada() {
     return true; // Retorna verdadeiro para indicar que a tarefa foi completada
 }
 
-void Menu1() {t
+void Menu1() {
     const int menuID = 1;  
     while (true) {
         lcd.setCursor(0, 1);
@@ -548,6 +558,12 @@ void setup(){
     pinMode(DIR, OUTPUT);
     pinMode(ENABLE, OUTPUT);
     pinMode(SENSOR, INPUT);
+
+    S1.attach(SERVO1);
+    S2.attach(SERVO2);
+
+    S1.write(90);
+    S2.write(130);
 
     attachInterrupt(digitalPinToInterrupt(SENSOR), sensorInterrupt, RISING);
 }

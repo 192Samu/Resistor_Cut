@@ -1,4 +1,4 @@
-#ifndef MENU_H
+/*#ifndef MENU_H
 #define MENU_H
 
 class menu {
@@ -8,4 +8,4 @@ class menu {
 
 }
 
-#endif
+#endif*/
