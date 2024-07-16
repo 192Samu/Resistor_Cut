@@ -1,3 +1,5 @@
+//git config --global --add safe.directory D:/PlatformIO/GitHub/Resistor_Cut
+
 #include <Arduino.h>
 #include <LiquidCrystal.h>
 #include <Servo.h>
