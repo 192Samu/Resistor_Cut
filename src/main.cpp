@@ -2,12 +2,12 @@
 #include <LiquidCrystal.h>
 #include <Servo.h>
 
-#define STEP 12     //pino D2 da shield
-#define DIR 13      //pino D3 da shield
-#define ENABLE 11    //pino D5 da shield
-#define SENSOR 2    //pino D6 da shield
-#define SERVO1 3    //pino D7 da shield (PWM)
-#define SERVO2 2   //pino D1 da shield (PWM)
+#define STEP 12
+#define DIR 13
+#define ENABLE 11 
+#define SERVO1 3
+#define SERVO2 1
+#define SENSOR 2
 
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 Servo S1;
@@ -22,6 +22,7 @@ int maxCortes = 300;
 int maxResistor = 50; // Não esquecer de considerar esse valor x10 na função iniciarTarefa()
 int valorCorteDesejado = 0;
 int valorResistorDesejado = 0;
+int resistoresRestantes = 0;
 
 volatile int contador = 0;
  
@@ -91,47 +92,49 @@ void sensorInterrupt() {
   contador++; // Incrementa o contador quando ocorre a interrupção do sensor
 }
 
-void iniciarTarefa(int menu, int qtde) {
+bool tarefaCompletada() {
+    // Implemente a lógica para verificar se a tarefa foi completada
+    // Exemplo simples: aguarda um tempo fixo para simular o término da tarefa
+    MainMenuDisplay();
+    lcd.clear();
+    return true; // Retorna verdadeiro para indicar que a tarefa foi completada
+}
+
+void iniciarTarefa(int menu, int qtde, int i) {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Iniciando tarefa...");
     delay(1000);
 
-    S1.write(150);
-    S2.write(30);
-    delay(200);
-    S1.write(90);
-    S2.write(130);
-
     digitalWrite(ENABLE, LOW);
     digitalWrite(DIR, LOW);
 
-    unsigned long previousMicros = micros();
-    while (contador < qtde+2) {
-        digitalWrite(STEP, HIGH);
-        while (micros() - previousMicros < 300) {}
-            digitalWrite(STEP, LOW);
-            while (micros() - previousMicros < 300) {}
-                previousMicros += 300;
-            }
-    digitalWrite(ENABLE, HIGH);
-    /*S1.write(75);
-    S2.write(115);
-    delay(500);
-    S1.write(90);
-    S2.write(90);*/
+    while(i < valorCorteDesejado+1){
+        unsigned long previousMicros = micros();
+        while (contador < qtde) {
+            digitalWrite(STEP, HIGH);
+            while (micros() - previousMicros < 350) {}
+                digitalWrite(STEP, LOW);
+                while (micros() - previousMicros < 350) {}
+                    previousMicros += 350;
+                }
+        digitalWrite(ENABLE, HIGH);
+
+        S1.write(40);
+        S2.write(140);
+        delay(200);
+        S1.write(180);
+        S2.write(0);
+        i++;
+    }
+
+     digitalWrite(ENABLE, HIGH);
 
     lcd.clear();
     lcd.setCursor(0, 1);
     lcd.print("Tarefa concluida!");
-}
-
-bool tarefaCompletada() {
-    // Implemente a lógica para verificar se a tarefa foi completada
-    // Exemplo simples: aguarda um tempo fixo para simular o término da tarefa
-    delay(2000); // Exemplo: aguarda 1 segundo para simular término da tarefa
-    lcd.clear();
-    return true; // Retorna verdadeiro para indicar que a tarefa foi completada
+    tarefaCompletada();
+    resistoresRestantes -= 15;
 }
 
 void Menu1() {
@@ -196,7 +199,12 @@ void Menu1() {
                 while (ReadKeypad() == 'S') {
                     if (millis() - pressStartMillis >= tempoPressionado) {
                         valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
-                        iniciarTarefa(menuID, 15); // Passa o menuID para iniciarTarefa
+                        if (resistoresRestantes == 0) {
+                            iniciarTarefa(menuID, 18, count); // Inicia com 17 resistores se há restantes
+                            resistoresRestantes = 3; // Reduz os restantes em 2
+                        } else {
+                            iniciarTarefa(menuID, 15, count); // Inicia com 15 resistores
+                        } // Passa o menuID para iniciarTarefa
                         tarefaIniciada = true;
                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
                         break;
@@ -278,7 +286,7 @@ void Menu2() {
                 while (ReadKeypad() == 'S') {
                     if (millis() - pressStartMillis >= tempoPressionado) {
                         valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
-                        iniciarTarefa(menuID, 5);
+                        iniciarTarefa(menuID, 5, count);
                         tarefaIniciada = true;
                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
                         break;
@@ -360,7 +368,7 @@ void Menu3() {
                 while (ReadKeypad() == 'S') {
                     if (millis() - pressStartMillis >= tempoPressionado) {
                         valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
-                        iniciarTarefa(menuID, 4);
+                        iniciarTarefa(menuID, 4, count);
                         tarefaIniciada = true;
                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
                         break;
@@ -498,7 +506,7 @@ void Menu4(){
                                 while (ReadKeypad() == 'S') {
                                     if (millis() - pressStartMillis >= tempoPressionado) {
                                         valorCorteDesejado = count; // Define o valor desejado como o valor atual de count
-                                        iniciarTarefa(menuID, 4);
+                                        iniciarTarefa(menuID, 4, count);
                                         tarefaIniciada = true;
                                         botaoConfirmarPressionado = true; // Marca o botão de confirmar como pressionado
                                         break;
@@ -562,8 +570,8 @@ void setup(){
     S1.attach(SERVO1);
     S2.attach(SERVO2);
 
-    S1.write(90);
-    S2.write(130);
+    S1.write(180);
+    S2.write(0);
 
     attachInterrupt(digitalPinToInterrupt(SENSOR), sensorInterrupt, RISING);
 }
